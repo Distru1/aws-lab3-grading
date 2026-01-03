@@ -41,5 +41,8 @@ jobs:
               --no-fail-on-empty-changeset
       
       - name: Run test
+        env:
+          STACK_NAME: lab3-test  
         run: |
-          python tests/test_lab3.py
+          pip install pytest boto3 Pillow
+          pytest tests/test_lab3.py -v
