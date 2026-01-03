@@ -40,6 +40,12 @@ jobs:
               --no-confirm-changeset \
               --no-fail-on-empty-changeset
       
+      - name: Create local test asset
+        run: |
+          mkdir -p tests/assets
+          # This line uses Python to "draw" a 100x100 image so the test has something to upload
+          python3 -c "from PIL import Image; img = Image.new('RGB', (100, 100), color='red'); img.save('tests/assets/tiny.jpg')"
+
       - name: Run test
         env:
           STACK_NAME: lab3-test
