@@ -1,9 +1,10 @@
 import json
+import os
 import boto3
-import io
 from PIL import Image
+from io import BytesIO
 
-s3 = boto3.client("s3")
+s3 = boto3.client('s3')
 
 def lambda_handler(event, context):
     for record in event['Records']:
@@ -11,30 +12,31 @@ def lambda_handler(event, context):
         bucket = body['bucket']
         key = body['key']
         
-        # Idempotency check: Does metadata already exist?
-        metadata_key = f"metadata/{key.split('/')[-1]}.json"
+        filename = os.path.basename(key)
+        metadata_key = f"metadata/{filename}.json"
+        
         try:
             s3.head_object(Bucket=bucket, Key=metadata_key)
-            print(f"Metadata already exists for {key}. Skipping.")
             continue
         except:
-            pass # Doesn't exist, proceed
-
-        # Download and extract
+            pass
+            
         obj = s3.get_object(Bucket=bucket, Key=key)
-        img = Image.open(io.BytesIO(obj['Body'].read()))
+        img_data = obj['Body'].read()
         
-        metadata = {
-            "format": img.format,
-            "width": img.width,
-            "height": img.height,
-            "size_bytes": obj['ContentLength']
-        }
-
-        # Save to metadata/ prefix
+        with Image.open(BytesIO(img_data)) as img:
+            metadata = {
+                "source_bucket": bucket,
+                "source_key": key,
+                "width": img.width,
+                "height": img.height,
+                "file_size_bytes": obj['ContentLength'],
+                "format": img.format
+            }
+            
         s3.put_object(
             Bucket=bucket,
             Key=metadata_key,
             Body=json.dumps(metadata),
-            ContentType="application/json"
+            ContentType='application/json'
         )
