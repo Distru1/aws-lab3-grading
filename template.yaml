@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: S3 -> Ingest Lambda -> SQS -> Metadata Lambda -> S3
+
+Resources:
+  ImageProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
+
+  ImagesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "images-${AWS::AccountId}-${AWS::Region}"
+
+  # FUNCTION 1: Ingest (Triggered by S3)
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: ingest.lambda_handler
+      Runtime: python3.12
+      Environment:
+        Variables:
+          QUEUE_URL: !Ref ImageProcessingQueue
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ImageProcessingQueue.QueueName
+      Events:
+        NewImage:
+          Type: S3
+          Properties:
+            Bucket: !Ref ImagesBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: incoming/
+
+  # FUNCTION 2: Metadata Extraction
+  MetadataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: metadata.lambda_handler
+      Runtime: python3.12
+      Timeout: 30
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub "images-${AWS::AccountId}-${AWS::Region}"
+        - S3WritePolicy:
+            BucketName: !Sub "images-${AWS::AccountId}-${AWS::Region}"
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ImageProcessingQueue.Arn
+            BatchSize: 1
